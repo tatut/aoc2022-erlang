@@ -36,12 +36,12 @@ my_score(OpponentMove, MyMove) ->
         end.
 
 -spec play_round1(binary()) -> integer().
-play_round1(<<>>) -> 0;
 play_round1(<<Opponent:8, " ", Me:8>>) ->
     my_score(move(Opponent), move(Me)).
 
 play(Input, RoundFun) ->
-    lists:foldr(fun(Round,Acc) -> Acc + RoundFun(Round) end,
+    lists:foldr(fun(<<>>, Acc) -> Acc;
+                   (Round,Acc) -> Acc + RoundFun(Round) end,
                 0,
                 binary:split(Input, <<"\n">>, [global])).
 
@@ -64,7 +64,6 @@ determine_move($Z, rock) -> paper;
 determine_move($Z, paper) -> scissors;
 determine_move($Z, scissors) -> rock.
 
-play_round2(<<>>) -> 0;
 play_round2(<<Opponent:8, " ", Me:8>>) ->
     OpponentMove = move(Opponent),
     my_score(OpponentMove, determine_move(Me, OpponentMove)).
