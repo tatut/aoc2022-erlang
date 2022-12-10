@@ -27,11 +27,7 @@ cmds([[$$, $ | CmdLine]|Rest], Acc) ->
 update_path(Root, [], Fun) -> Fun(Root);
 update_path({dir,Name,Contents}, [P | Path], Fun) ->
     {dir, Name,
-     lists:map(fun({dir, PathName, _} = Dir) ->
-                       case PathName == P of
-                           true -> update_path(Dir, Path, Fun);
-                           false -> Dir
-                       end;
+     lists:map(fun({dir, P1, _} = Dir) when P == P1 -> update_path(Dir, Path, Fun);
                   (Else) -> Else end,
                Contents)}.
 
@@ -45,27 +41,15 @@ parse_contents(X) ->
 p(Path) -> "/" ++ string:join(Path, "/").
 
 build({"cd", "/", []}, {_, Root}) -> {[], Root};
-build({"cd", "..",[]}, {Cwd, Root}) ->
-    NewCwd = lists:sublist(Cwd, 1, length(Cwd)-1),
-    %%io:format("  CD ~p => ~p~n", [p(Cwd), p(NewCwd)]),
-    {NewCwd, Root};
-build({"cd", Path, []}, {Cwd, Root}) ->
-    NewCwd = Cwd ++ [Path],
-    %%io:format("  CD ~p => ~p~n", [p(Cwd), p(NewCwd)]),
-    {NewCwd, Root};
+build({"cd", "..",[]}, {Cwd, Root}) -> {lists:sublist(Cwd, 1, length(Cwd)-1), Root};
+build({"cd", Path, []}, {Cwd, Root}) -> {Cwd ++ [Path], Root};
 build({"ls", [], Contents}, {Cwd, Root}) ->
     Conts = [parse_contents(F) || F <- Contents],
-    %%io:format("  CWD ~p HAS ~p~n", [p(Cwd), Conts]),
-    {Cwd, update_path(Root, Cwd, fun({dir,Name,_}) -> {dir,Name,Conts} end)}.
+    {Cwd, update_path(Root, Cwd,
+                      fun({dir,Name,_}) -> {dir,Name,Conts} end)}.
 
 build_model(Input) ->
-    {_,Root} = lists:foldl(fun(Cmd,Acc) ->
-                                   %%io:format("AT: ~p RUN: ~p~n", [element(1,Acc),Cmd]),
-                                   Acc1 = build(Cmd,Acc),
-                                   %%io:format("  AFTER: ~p~n\n---------\n", [Acc1]),
-                                   Acc1
-
-                           end, {undefined, {dir,"",[]}}, Input),
+    {_,Root} = lists:foldl(fun build/2, {undefined, {dir,"",[]}}, Input),
     Root.
 
 print_model(Root) ->
@@ -76,8 +60,7 @@ print_model({dir, _, Contents}, Prefix) ->
                           io:format("~s- ~s (file,size=~p)~n", [Prefix, Name, Size]);
                      ({dir,Name,_} = Dir) ->
                           io:format("~s- ~s (dir)~n", [Prefix, Name]),
-                          print_model(Dir, Prefix ++ "  ");
-                     (Else) -> io:format("~s  SOMETHING ELSE ~p~n", [Prefix, Else])
+                          print_model(Dir, Prefix ++ "  ")
                   end,
                   Contents).
 
@@ -86,45 +69,20 @@ print_model({dir, _, Contents}, Prefix) ->
 du({file,_,Size}) -> Size;
 du({dir,_,Contents}) -> lists:sum([du(C) || C <- Contents]).
 
-prewalk(Fun, {file,_,_}=File) -> Fun(File);
-prewalk(Fun, {dir,_,Contents}=Dir) ->
-    Fun(Dir),
-    lists:foreach(fun(C)->prewalk(Fun,C) end, Contents).
-
-receive_numbers(Acc) ->
-    receive
-        N -> receive_numbers(Acc + N)
-    after
-        1000 -> Acc
-    end.
-
+prewalk(Fun, {file,_,_}=File,Acc) -> Fun(File,Acc);
+prewalk(Fun, {dir,_,Contents}=Dir, Acc0) ->
+    Acc1 = Fun(Dir,Acc0),
+    lists:foldl(fun(C,AccI) -> prewalk(Fun,C,AccI) end, Acc1, Contents).
 
 part1() ->
-    Me = self(),
-    Root = input(),
-
-    %% Spawn process to go thru the tree and report back
-    spawn(fun() ->
-                  prewalk(fun({dir,_,_}=D) ->
-                                  Size = du(D),
-                                  case Size < 100000 of
-                                      true -> Me ! Size;
-                                      false -> ok
-                                  end;
-                             (_) -> ok
-                          end, Root) end),
-    receive_numbers(0).
-
-receive_smallest() ->
-    receive N ->
-            receive_smallest(N)
-    end.
-receive_smallest(Acc) ->
-    receive
-        N -> receive_smallest(min(N,Acc))
-    after
-        1000 -> Acc
-    end.
+    prewalk(fun({dir,_,_}=D,Acc) ->
+                    Size = du(D),
+                    case Size < 100000 of
+                        true -> Acc + Size;
+                        false -> Acc
+                    end;
+               (_,Acc) -> Acc
+            end, input(), 0).
 
 part2() ->
     Root = input(),
@@ -133,15 +91,12 @@ part2() ->
     ActualFreeSpace = TotalSpace - du(Root),
     MinSizeToDelete = NeededFreeSpace - ActualFreeSpace,
     io:format("Need to find directory to delete with size of: ~p~n", [MinSizeToDelete]),
-    Me = self(),
-    spawn(fun() ->
-                  prewalk(fun({dir,_,_}=D) ->
-                                  Size = du(D),
-                                  case Size >= MinSizeToDelete of
-                                      true -> Me ! Size;
-                                      false -> ok
-                                  end;
-                             (_) -> ok
-                          end, Root)
-          end),
-    receive_smallest().
+    prewalk(
+      fun({dir,_,_}=D,Acc) ->
+              Size = du(D),
+              case Size >= MinSizeToDelete of
+                  true -> min(Size,Acc);
+                  false -> Acc
+              end;
+         (_,Acc) -> Acc
+      end, Root, 576460752303423488).
