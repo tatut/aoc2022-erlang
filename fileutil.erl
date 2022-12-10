@@ -14,6 +14,3 @@ read_lines(S, Lines) ->
         eof -> lists:reverse(Lines);
         Line -> read_lines(S, [string:trim(Line)|Lines])
     end.
-
-
-binary:split(${1:Arg1}, ${2:Arg2}, ${3:Arg3})
