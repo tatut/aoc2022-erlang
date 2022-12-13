@@ -21,6 +21,7 @@ find_pos(Map, Marker, {X, Y}) ->
         _ -> find_pos(Map,Marker,{X+1,Y})
     end.
 
+
 neighbors({W,H,_}, {X, Y}) ->
     [{X1,Y1} || {X1,Y1} <- [{X-1,Y}, {X+1,Y}, {X, Y-1}, {X, Y+1}],
                 (X1 >= 0) and (X1 < W) and (Y1 >= 0) and (Y1 < H)].
@@ -30,7 +31,6 @@ possible_steps(Map, From) ->
     [To || To <- neighbors(Map, From),
            e(at(Map, To)) =< MaxElevation].
 
-score({X1,Y1},{X2,Y2}) -> abs(X1-X2)+abs(Y1-Y2).
 
 build_graph(Map) ->
     G = digraph:new(),
@@ -71,6 +71,21 @@ part2() ->
                 end,
                 999999999999,
                 digraph:vertices(G)).
+
+part2_once() ->
+    Map = input(),
+    G = build_graph(input()),
+    End = find_pos(Map,$E),
+    %% Add single starting position that connectes to all $a labeled
+    Start = digraph:add_vertex(G,start),
+    lists:foreach(fun(V) ->
+                          {_, L} = digraph:vertex(G,V),
+                          if L == $a -> digraph:add_edge(G, Start, V);
+                             true -> ok
+                          end
+                  end, digraph:vertices(G)),
+    length(digraph:get_short_path(G, Start, End)) - 2.
+
 
 
 xpm_col(Ch) ->
