@@ -27,11 +27,10 @@ xpm_image_line(Y, W, H, Pix, Default) ->
 
 
 draw(File, Colors, PixData, Default) ->
-    io:format("Write xpm to ~p~n", [File]),
     {MaxX,MaxY} = ets:foldl(fun({{X,Y},_}, {Mx,My}) -> {max(X,Mx), max(Y,My)} end,
                             {0,0}, PixData),
     W = MaxX+1, H = MaxY+1,
-    io:format("  maxx: ~p, maxy: ~p~n", [MaxX, MaxY]),
+    io:format("Write xpm to ~p (~px~p)~n", [File, W, H]),
     file:write_file(File,
                     [xpm_head(),
                      xpm_info(W, H, Colors),

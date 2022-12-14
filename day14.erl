@@ -28,12 +28,12 @@ parse_point(Str) ->
     {list_to_integer(X), list_to_integer(Y)}.
 
 draw() ->
-    draw(input()).
+    draw(input(), "day14.xpm").
 
-draw(T) ->
-    xpm:draw("day14.xpm", [{$#, {0,0,0}},
-                           {$., {255,255,255}},
-                           {$%, {194,178,128}}],
+draw(T, File) ->
+    xpm:draw(File, [{$#, {0,0,0}},
+                    {$., {255,255,255}},
+                    {$%, {194,178,128}}],
              T, $.).
 
 at(T, Pos) ->
@@ -67,6 +67,14 @@ drop_sand(T, H, {X,Y}) ->
     end.
 
 sandstorm(T, H, DropSand, I) ->
+
+    %% Not necessary for the solution, but fun to create images every thousandth steps
+    %% to make an animated gif
+    if I rem 100 == 0 ->
+            draw(T, "day14_" ++ io_lib:format("~6.10.0b", [I]) ++ ".xpm");
+       true -> ok
+    end,
+
     case DropSand(T, H, {500,0}) of
         abyss -> I;
         _ -> sandstorm(T, H, DropSand, I+1)
@@ -82,9 +90,7 @@ cave_size(T) ->
 solve(DropSand) ->
     T = input(),
     {_,MaxY} = cave_size(T),
-    Sand = sandstorm(T, MaxY, DropSand, 0),
-    draw(T),
-    Sand.
+    sandstorm(T, MaxY, DropSand, 0).
 
 part1() -> solve(fun drop_sand/3).
 
@@ -111,3 +117,7 @@ drop_sand_infinite(T, H, {X,Y}) ->
                               end
                  end
     end.
+
+%% Generate images
+%% $ for i in day14_*.xpm; do convert -extract 250x250+300+00 $i $i.extract.xpm ; done
+%% $ convert  *.extract.xpm day14_part2_small.gif
