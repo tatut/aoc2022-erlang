@@ -2,8 +2,7 @@
 -compile(export_all).
 -record(sensor, {pos, closest}).
 
-input(File) ->
-    [parse_sensor(L) || L <- fileutil:lines(File)].
+input() -> [parse_sensor(L) || L <- fileutil:lines("day15.txt")].
 
 parse_sensor(Line) ->
     {match, Matches} = re:run(Line, "-?\\d+",[global]),
@@ -13,23 +12,20 @@ parse_sensor(Line) ->
 dist({X1,Y1}, {X2,Y2}) ->
     abs(X1-X2) + abs(Y1-Y2).
 
-coverage(#sensor{pos={Sx,Sy}, closest={Cx,Cy}}=S, Y) ->
+coverage(#sensor{pos={Sx,Sy}, closest={Cx,Cy}}, Y) ->
     Len = dist({Sx,Sy},{Cx,Cy}),
     Xlen = Len - abs(Sy - Y),
-    if Xlen < 1 ->
-            %%io:format(" cov len, ~p, len: ~p , xlen:  ~p~n", [S,Len,Xlen]),
-            none;
+    if Xlen < 1 -> none;
        true -> {Sx - Xlen, Sx + Xlen}
     end.
 
-overlaps({L1,H1},{L2,H2}) when H1 >= L2 -> true;
+overlaps({_,H1},{L2,_}) when H1 >= L2 -> true;
 overlaps(_,_) -> false.
 
 combine({L1,H1},{L2,H2}) -> {min(L1,L2), max(H1,H2)}.
 
 gaps([_], Gaps) -> Gaps;
 gaps([Cov1, Cov2 | Rest], Gaps) ->
-    %%io:format("S1 ~p  S2 ~p~n", [Cov1, Cov2]),
     case overlaps(Cov1,Cov2) of
         true -> gaps([combine(Cov1,Cov2) | Rest], Gaps);
         false ->
@@ -46,44 +42,27 @@ xrange(#sensor{pos=P, closest = C}, {MinX,MaxX}) ->
     {Px2,_} = maxp(P,C),
     {min(Px1-Len,MinX), max(Px2+Len,MaxX)}.
 
-
 part1() ->
-    %%File = "day15_sample.txt", Row = 10,
-    File = "day15.txt", Row = 2000000,
-    Sensors = input(File),
+    Row = 2000000,
+    Sensors = input(),
     {MinX,MaxX} = lists:foldl(fun xrange/2, {0,0}, Sensors),
-    io:format("xrange: ~p~n", [{MinX,MaxX}]),
     Coverages = lists:dropwhile(fun(none) -> true; (_) -> false end,
                                 lists:sort(
                                   [ coverage(S,Row) || S <- Sensors])),
     Gaps = gaps(Coverages, 0),
     {Xstart,_} = hd(Coverages),
-    Before = if Xstart > MinX -> Xstart - MinX;
-                true -> 0
-             end,
+    Before = max(0, Xstart - MinX),
     {_,Xend} = lists:last(Coverages),
-    After = if Xend < MaxX -> MaxX - Xend;
-               true -> 0
-            end,
+    After = max(0, MaxX - Xend),
     (MaxX-MinX) - (Before + Gaps + After).
-
-%% part1 => 4424278
 
 % find beacon  iterate possible positions by row, find first
 part2() ->
-    %%File = "day15_sample.txt", MaxCoord = 20,
-    File = "day15.txt",
-    Sensors = input(File),
-    XRange = {0,4000000}, %%lists:foldl(fun xrange/2, {0,0}, Sensors),
-    io:format("xrange: ~p~n", [XRange]),
-    GapPos = possible_position(XRange, Sensors, 0),
-    io:format("Gap pos: ~p ~n", [GapPos]),
-    {X,Y} = GapPos,
+    {X,Y} = possible_position({0,4000000}, input(), 0),
     Y + 4000000*X.
 
 mind_the_gap(_, [_]) -> none;
 mind_the_gap({MinX,MaxX}, [Cov1, Cov2 | Rest]) ->
-    %%io:format("S1 ~p  S2 ~p~n", [Cov1, Cov2]),
     case overlaps(Cov1,Cov2) of
         true -> mind_the_gap({MinX,MaxX}, [combine(Cov1,Cov2) | Rest]);
         false ->
@@ -94,7 +73,7 @@ mind_the_gap({MinX,MaxX}, [Cov1, Cov2 | Rest]) ->
             end
     end.
 
-possible_position(_,_,Y) when Y > 4000000 -> error;
+possible_position({_,MaxX},_,Y) when Y > MaxX -> error;
 possible_position({MinX,MaxX}, Sensors, Y) ->
     Coverages =
         lists:takewhile(fun({Xlo,_}) when Xlo < MaxX -> true;
