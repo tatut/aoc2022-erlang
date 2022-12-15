@@ -88,3 +88,28 @@ possible_position({MinX,MaxX}, Sensors, Y) ->
         none -> possible_position({MinX,MaxX}, Sensors, Y+1);
         X -> {X,Y}
     end.
+
+part2_workers(NumWorkers) ->
+    Sensors = input(),
+    lists:foreach(fun(N) -> spawn(?MODULE, possible_positions_worker,
+                                  [self(), {0,4000000}, Sensors, N, NumWorkers]) end,
+                  lists:seq(0, NumWorkers-1)),
+    receive {X,Y} -> Y + 4000000*X
+    after 30000 -> timeout
+    end.
+
+possible_positions_worker(_, {_,Max}, _, Y, _) when Y > Max -> none;
+possible_positions_worker(ResultPid, {Min,Max}, Sensors, Y, YStep) ->
+    Coverages =
+        lists:takewhile(fun({Xlo,_}) when Xlo < Max -> true;
+                           (_) -> false
+                        end,
+                        lists:dropwhile(fun(none) -> true;
+                                           ({_,Xhi}) when Xhi < Min -> true;
+                                           (_) -> false end,
+                                        lists:sort(
+                                          [ coverage(S,Y) || S <- Sensors]))),
+    case mind_the_gap({Min,Max}, Coverages) of
+        none -> possible_positions_worker(ResultPid, {Min,Max}, Sensors, Y+YStep, YStep);
+        X -> ResultPid ! {X,Y}
+    end.
