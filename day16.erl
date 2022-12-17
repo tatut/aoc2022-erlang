@@ -82,9 +82,11 @@ execute_route(G, Time, Elf, Elephant, Nodes) ->
 
 work(Name) ->
     N = 8,
-    lists:foreach(fun(_) -> spawn(?MODULE, Name, [self()]) end,
-                  lists:seq(1, N)),
-    receive_result(0).
+    Pids = [spawn(?MODULE, Name, [self()])
+            || _ <- lists:seq(1, N) ],
+    Result = receive_result(0),
+    [exit(P, done) || P <- Pids],
+    Result.
 
 part1() -> work(part1_worker).
 part2() -> work(part2_worker).
