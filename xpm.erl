@@ -17,7 +17,10 @@ xpm_image_line(Y, W, H, Pix, Default) ->
     ["\"",
      [ case ets:lookup(Pix, {X,Y}) of
            [{_,Char}] -> Char;
-           _ -> Default
+           _ -> case Default of
+                    F when is_function(Default) -> F({X,Y});
+                    _ -> Default
+                end
        end || X <- lists:seq(0, W) ],
      "\"",
      if Y == H -> ",\n";
@@ -26,9 +29,7 @@ xpm_image_line(Y, W, H, Pix, Default) ->
     ].
 
 
-draw(File, Colors, PixData, Default) ->
-    {MaxX,MaxY} = ets:foldl(fun({{X,Y},_}, {Mx,My}) -> {max(X,Mx), max(Y,My)} end,
-                            {0,0}, PixData),
+draw(File, {MaxX,MaxY}, Colors, PixData, Default) ->
     W = MaxX+1, H = MaxY+1,
     io:format("Write xpm to ~p (~px~p)~n", [File, W, H]),
     file:write_file(File,
@@ -36,3 +37,10 @@ draw(File, Colors, PixData, Default) ->
                      xpm_info(W, H, Colors),
                      [ xpm_image_line(Y, W, H, PixData, Default) || Y <- lists:seq(0, H) ],
                      xpm_foot()]).
+
+draw(File, Colors, PixData, Default) ->
+    Size = ets:foldl(fun({{X,Y},_}, {Mx,My}) -> {max(X,Mx), max(Y,My)};
+                               (_, Acc) -> Acc
+                            end,
+                            {0,0}, PixData),
+    draw(File, Size, Colors, PixData, Default).
