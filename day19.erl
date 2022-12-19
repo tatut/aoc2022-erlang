@@ -19,7 +19,6 @@ calculate_costs(#blueprint{robots=R}=Bp) ->
                                 maps:put(Type, cost_of(Type, Bp), Acc)
                         end,
                         #{}, R),
-    io:format("Costs ~p~n", [CostMap]),
     Bp#blueprint{costs = CostMap}.
 
 cost_of(ore, _) -> 1;
@@ -50,7 +49,6 @@ incmat(Type,By,#state{materials=Mat}=S) -> S#state{materials=maps:put(Type, By+m
 rob(Type, #state{robots=Robots}) -> maps:get(Type, Robots).
 
 simulate(#state{minute=Min, robots = Robots}=S0, BuildType) ->
-    %% Start building best kind of robot we can
     S1 = case BuildType of
              none -> S0;
              Type -> build(Type, S0)
@@ -89,13 +87,8 @@ value(#state{blueprint=#blueprint{costs = Costs}}=State) ->
 
 simulate_rounds(States, Minutes, MaxMinutes) when Minutes == MaxMinutes  -> States;
 simulate_rounds(States, Minutes, MaxMinutes) ->
-    MaxGeodes = lists:max([ mat(geode, S) || S <- States]),
-    MaxObsidian = lists:max([ mat(obsidian, S) || S <- States]),
-    MaxClay = lists:max([ mat(clay, S) || S <- States]),
-    MaxOre = lists:max([ mat(ore, S) || S <- States]),
-    io:format("Minutes ~p, num states ~p, max geodes: ~p, obs: ~p, clay: ~p, ore: ~p~n",
-              [Minutes, length(States), MaxGeodes, MaxObsidian, MaxClay, MaxOre]),
-    %% We need to trim the states, so that
+    %% We need to trim the states, so that the amount is manageable
+    %% sort by the value of the state and take top 1000
     TrimmedStates = lists:sublist(lists:sort(fun(S1,S2) -> value(S1) > value(S2) end, States), 1000),
     simulate_rounds(simulate_states(TrimmedStates), Minutes + 1, MaxMinutes).
 
@@ -106,8 +99,7 @@ simulate_blueprint(Blueprint, MaxMinutes) ->
                               FinishedStates)),
     Id = Blueprint#blueprint.id,
     Geodes = mat(geode,BestState),
-    Ql = Blueprint#blueprint.id * mat(geode,BestState),
-    io:format("Blueprint #~p geodes ~p => ql ~p~n", [Id, Geodes, Ql]),
+    Ql = Id * mat(geode,BestState),
     {Geodes, Ql}.
 
 
