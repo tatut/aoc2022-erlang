@@ -39,8 +39,8 @@ move(T, Len, Idx) ->
 
             %% Rotate the ring in the wanted direction
             InsertAfter = case V of
-                              Pos when Pos > 0 -> rotate(T, Next, 4, Value-1);
-                              Neg when Neg < 0 -> rotate(T, Prev, 3, abs(Value))
+                              Pos when Pos > 0 -> rotate(T, Next, 4, (Value-1) rem (Len-1));
+                              Neg when Neg < 0 -> rotate(T, Prev, 3, abs(Value) rem (Len-1))
                           end,
             %%io:format("Move idx ~p val ~p TO AFTER ~p~n", [Idx, Value, at(T,InsertAfter)]),
             {_, _, _, NewNext} = at(T, InsertAfter),
@@ -81,19 +81,18 @@ part1() ->
     mix(T,Len),
     sum3(T).
 
-%% 872 is right
-
 % Part2 multiply by encryption key
 -define(ENCRYPTION, 811589153).
 
-mixtimes(T, Len, 0) -> ok;
+mixtimes(_, _, 0) -> ok;
 mixtimes(T, Len, Times) ->
     mix(T,Len),
     mixtimes(T, Len, Times-1).
 
 part2() ->
     {ok, T, Len} = input(?ENCRYPTION),
-    mix(T,Len).
+    mixtimes(T,Len,10),
+    sum3(T).
 
 part2sample() ->
     {ok, T, Len} = sample(?ENCRYPTION),
