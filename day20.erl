@@ -1,113 +1,101 @@
 -module(day20).
 -compile(export_all).
 
-sample() ->
-    initial_state([1, 2, -3, 3, -2, 0, 4]).
+%% model ring as an ETS table that as {InitialIndex, Value, PreIdx, NextIdx}
+%% any movement, you just update prev and next to point to each other,
+%% then rotate the ring
 
-input() ->
-    lists:enumerate([list_to_integer(L) || L <- fileutil:lines("day20.txt") ]).
-
-initial_state(List) ->
-    lists:enumerate(List).
-
-%% Find current index based in initial index
-idx(InitialIdx, C) ->
-    idx(InitialIdx, C, 1).
-idx(InitialIdx0, [{InitialIdx1,Val}|_], Idx) when InitialIdx0 == InitialIdx1 -> {Idx, Val};
-idx(InitialIdx, [_|Rest], Idx) -> idx(InitialIdx, Rest, Idx+1).
-
-newidx(Idx0, _, _, 0) -> Idx0;
-newidx(Idx0, Len, Dir, HowMany) ->
-    Idx1 = Idx0 + Dir,
-    newidx(case Idx1 of
-               0 -> Len-1;
-               1 -> Len;
-               Len -> 1;
-               _ -> Idx1
-           end, Len, Dir, HowMany-1).
-
-removeidx(List, Idx) ->
-    [ X || {_, X} <-
-               lists:keydelete(Idx, 1, lists:enumerate(List))].
-
-add_to_idx(List, Idx, Item) ->
-    lists:sublist(List, 1, Idx-1) ++ [Item] ++ lists:sublist(List, Idx, length(List)).
-
-move(_, _, 0, List) -> List;
-move(IdxFn, Idx0, HowMany, List) ->
+as_table(Encryption,List) ->
+    T = ets:new(day20, [set]),
     Len = length(List),
-    %%HowMany = HowMany0 rem length(List),
-    Idx1 = IdxFn(Idx0, Len, HowMany),
-    if Idx0 == Idx1 -> List;
-       true -> Item = lists:nth(Idx0,List),
-               %%io:format("~p at ~p => ~p, howmany ~p, len ~p~n",[Item, Idx0, Idx1, HowMany, Len]),
-               add_to_idx(removeidx(List, Idx0), Idx1, Item)
+    Wrap = fun(X) when X == 0 -> Len;
+              (X) when X == Len+1 -> 1;
+              (X) -> X end,
+    [ ets:insert(T, {Idx, Encryption*Val, Wrap(Idx-1), Wrap(Idx+1)}) || {Idx,Val} <- lists:enumerate(List)],
+    {ok, T, Len}.
+
+sample(Encryption) -> as_table(Encryption, [1, 2, -3, 3, -2, 0, 4]).
+input(Encryption) -> as_table(Encryption, [list_to_integer(L) || L <- fileutil:lines("day20.txt") ]).
+
+at(T, Idx) ->
+    [Obj] = ets:lookup(T, Idx),
+    Obj.
+prev(T, Idx, NewPrev) ->
+    ets:update_element(T, Idx, [{3, NewPrev}]).
+next(T, Idx, NewNext) ->
+    ets:update_element(T, Idx, [{4, NewNext}]).
+both(T, Idx, NewPrev, NewNext) ->
+    ets:update_element(T, Idx, [{3, NewPrev}, {4, NewNext}]).
+
+%% Move item (by initial index)
+move(T, Len, Idx) ->
+    {_, Value, Prev, Next} = at(T, Idx),
+    case Value of
+        0 -> ok;
+        V ->
+            %% Remove myself by setting prev<->next pointing to each other
+            next(T, Prev, Next),
+            prev(T, Next, Prev),
+
+            %% Rotate the ring in the wanted direction
+            InsertAfter = case V of
+                              Pos when Pos > 0 -> rotate(T, Next, 4, Value-1);
+                              Neg when Neg < 0 -> rotate(T, Prev, 3, abs(Value))
+                          end,
+            %%io:format("Move idx ~p val ~p TO AFTER ~p~n", [Idx, Value, at(T,InsertAfter)]),
+            {_, _, _, NewNext} = at(T, InsertAfter),
+            next(T, InsertAfter, Idx),
+            both(T, Idx, InsertAfter, NewNext),
+            prev(T, NewNext, Idx),
+            ok
     end.
 
-move_pos(IdxFn, InitialIdx, List0) ->
-    {Idx0, Val} = idx(InitialIdx, List0),
-    %%io:format("~p move, val: ~p , idx: ~p ~n", [InitialIdx, Val, Idx0]),
-    move(IdxFn,Idx0, Val, List0).
-
-vals(L) ->
-    [element(2, I) || I <- L].
+rotate(_, At, _, 0) -> At;
+rotate(T, At, Link, Amount) ->
+    Next = element(Link, at(T, At)),
+    %%io:format("  move ~p => ~p (dir ~p)~n", [At, Next, Link]),
+    rotate(T, Next, Link, Amount-1).
 
 
-findidx(Pred, List) -> findidx(Pred, List, 1).
-findidx(Pred, [I|Items], Idx) ->
-    case Pred(I) of
-        true -> Idx;
-        false -> findidx(Pred, Items, Idx+1)
-    end.
+vals(_, _, 0, Acc) -> lists:reverse(Acc);
+vals(T, At, C, Acc) ->
+    {_, V, _, Next} = at(T, At),
+    vals(T, Next, C-1, [V|Acc]).
 
-mix(IdxFn, S0) ->
-    S1 = lists:foldl(fun(Idx,C0) ->
-                        C1 = move_pos(IdxFn, Idx, C0),
-                        %%io:format("  ~p  =>  ~p ~n", [vals(C0), vals(C1)]),
-                        C1
-                end,
-                     S0, lists:seq(1, length(S0))),
-    io:format(" Mixed: ~p ~n", [S1]),
-    S1.
+mix(T, Len) ->
+    lists:foreach(fun(Idx) ->
+                          move(T, Len, Idx)
+                          %%io:format("V: ~p~n",[vals(T, Idx, Len, [])])
+                  end,
+                  lists:seq(1, Len)).
 
-sum3(S1) ->
-    ZeroPos = findidx(fun({_,0}) -> true; (_) -> false end, S1),
-    Len = length(S1),
+sum3(T) ->
+    [[ZeroIdx]] = ets:match(T, {'$1', 0, '_', '_'}),
     Items =
-      [ X || {_,X} <- [ lists:nth((ZeroPos+N) rem Len, S1) || N <- [1000, 2000, 3000] ] ],
-    io:format("three items: ~p~n", [Items]),
+        [ element(2,at(T, Idx)) || Idx <- [ rotate(T, ZeroIdx, 4, N) || N <- [1000, 2000, 3000] ]],
+     io:format("three items: ~p~n", [Items]),
     lists:sum(Items).
 
-part1idx(Idx0, Len, HowMany) ->
-    newidx(Idx0, Len, case HowMany of
-                          Neg when Neg < 0 -> -1;
-                          Pos when Pos > 0 -> 1
-
-                      end,
-           abs(HowMany)).
-
 part1() ->
-    sum3(mix(fun part1idx/3, input())).
+    {ok, T, Len} = input(1),
+    mix(T,Len),
+    sum3(T).
 
 %% 872 is right
 
-part1sample()->
-    sum3(mix(fun part1idx/3, sample())).
-
-%%% Part2 multiply by encryption key
+% Part2 multiply by encryption key
 -define(ENCRYPTION, 811589153).
 
-part2idx(Idx0, Len, HowMany) ->
-    part1idx(Idx0,Len,HowMany).
-    %% case HowMany rem Len of
-    %%     0 -> Idx0;
-    %%     N -> part1idx(Idx0, Len, N)
-    %% end.
+mixtimes(T, Len, 0) -> ok;
+mixtimes(T, Len, Times) ->
+    mix(T,Len),
+    mixtimes(T, Len, Times-1).
 
-mixtimes(_, List, Times) when Times == 0 -> List;
-mixtimes(IdxFn, List, Times) -> mixtimes(IdxFn, mix(IdxFn, List), Times-1).
+part2() ->
+    {ok, T, Len} = input(?ENCRYPTION),
+    mix(T,Len).
 
 part2sample() ->
-    S0 = [ {Idx, Num * ?ENCRYPTION} || {Idx,Num} <- sample() ],
-    io:format("INITIAL: ~p~n", [S0]),
-    sum3(mixtimes(fun part2idx/3, S0, 10)).
+    {ok, T, Len} = sample(?ENCRYPTION),
+    mixtimes(T,Len,10),
+    ets:match(T, '$1').
