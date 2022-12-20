@@ -57,24 +57,12 @@ rotate(T, At, Link, Amount) ->
     rotate(T, Next, Link, Amount-1).
 
 
-vals(_, _, 0, Acc) -> lists:reverse(Acc);
-vals(T, At, C, Acc) ->
-    {_, V, _, Next} = at(T, At),
-    vals(T, Next, C-1, [V|Acc]).
-
 mix(T, Len) ->
-    lists:foreach(fun(Idx) ->
-                          move(T, Len, Idx)
-                          %%io:format("V: ~p~n",[vals(T, Idx, Len, [])])
-                  end,
-                  lists:seq(1, Len)).
+    lists:foreach(fun(Idx) -> move(T, Len, Idx) end, lists:seq(1, Len)).
 
 sum3(T) ->
     [[ZeroIdx]] = ets:match(T, {'$1', 0, '_', '_'}),
-    Items =
-        [ element(2,at(T, Idx)) || Idx <- [ rotate(T, ZeroIdx, 4, N) || N <- [1000, 2000, 3000] ]],
-     io:format("three items: ~p~n", [Items]),
-    lists:sum(Items).
+    lists:sum([ element(2,at(T, Idx)) || Idx <- [ rotate(T, ZeroIdx, 4, N) || N <- [1000, 2000, 3000] ]]).
 
 part1() ->
     {ok, T, Len} = input(1),
